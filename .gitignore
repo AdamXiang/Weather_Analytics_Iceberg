@@ -1,10 +1,47 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# === Environments and uv ===
+.venv/
+venv/
+ENV/
+env/
 
-# Virtual environments
-.venv
+# === Python runtime and byte-code ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# === Secrets and local configurations ===
+.env
+.env.*
+!.env.example
+
+# === Distribution and packaging artifacts ===
+dist/
+build/
+*.egg-info/
+*.egg
+
+# === Testing and code quality tools ===
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# === IDEs and operating system files ===
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# === Project runtime artifacts ===
+# Iceberg warehouse (table data + metadata) written by the Spark jobs
+iceberg-warehouse/
+# Generated landing CSVs and Power BI exports
+data/
+# Iceberg runtime JAR (download it, see README)
+jars/*.jar

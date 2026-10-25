@@ -7,7 +7,9 @@ authors = [
     { name = "Adam", email = "lavouver96@gmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "pyspark>=4.2.0",
+]
 
 [project.scripts]
 icerberg-weather-analytics = "icerberg_weather_analytics:main"
