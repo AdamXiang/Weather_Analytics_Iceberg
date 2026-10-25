@@ -1,0 +1,108 @@
+# =============================================================================
+# Spark / Iceberg command cheat sheet - Weather Analytics project
+# =============================================================================
+#
+# Reference commands for running the pipeline on the local Docker-based Spark
+# standalone cluster with Apache Iceberg. Copy and paste them into a terminal;
+# this file is not meant to be executed as a whole.
+#
+# Environment assumed by these commands:
+#   - Docker containers: ``iceberg-spark-master`` and ``iceberg-spark-worker``.
+#   - Spark standalone master reachable at ``spark-master:7077`` (from inside
+#     the Docker network).
+#   - Spark 3.5 built for Scala 2.12, with the matching Iceberg runtime JAR
+#     (Iceberg 1.9.2) mounted at ``/opt/iceberg-jars``.
+#   - Application scripts mounted at ``/opt/spark-apps``.
+#   - Iceberg warehouse mounted at ``/opt/iceberg/warehouse``.
+#
+# Pipeline scripts (medallion architecture), run in this order:
+#   bronze_ingest.py  ->  silver_upsert.py  ->  gold_analytics.py
+# Only the Bronze step is shown below; to run another step, change the script
+# name on the last line of the spark-submit command.
+#
+# Iceberg configuration shared by every command (explained once here):
+#   spark.sql.extensions
+#       Enables Iceberg's SQL extensions (e.g. MERGE INTO, stored procedures).
+#   spark.sql.catalog.local = org.apache.iceberg.spark.SparkCatalog
+#       Registers a catalog named "local" backed by Iceberg. Tables are
+#       therefore addressed as ``local.<namespace>.<table>``, e.g.
+#       ``local.weather.silver_weather``.
+#   spark.sql.catalog.local.type = hadoop
+#       Uses a file-system ("Hadoop") catalog: table metadata lives directly
+#       in the warehouse directory, so no Hive Metastore or database is needed.
+#   spark.sql.catalog.local.warehouse
+#       Root directory of the catalog. Every Spark process (master, worker,
+#       executors) must see the same path, e.g. through a shared Docker volume.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Run App
+# -----------------------------------------------------------------------------
+# Submit the Bronze ingestion job to the Spark cluster from the host machine.
+# ``docker exec`` (without -it) runs the command non-interactively inside the
+# running master container and streams its output back to the terminal.
+#
+# Options:
+#   --master                       Spark standalone cluster to run on.
+#   --jars                         Iceberg runtime JAR, added to the driver and
+#                                  executor classpaths.
+#   --conf spark.sql.defaultCatalog=local
+#                                  Make "local" the default catalog so
+#                                  unqualified table names resolve to Iceberg.
+#   --conf spark.sql.session.timeZone=UTC
+#                                  Interpret and display timestamps in UTC so
+#                                  results do not depend on the machine's
+#                                  local time zone (important for observed_at
+#                                  / ingested_at and the daily Gold aggregates).
+#   (last argument)                The application script to execute.
+
+docker exec iceberg-spark-master /opt/spark/bin/spark-submit \
+  --master spark://spark-master:7077 \
+  --jars /opt/iceberg-jars/iceberg-spark-runtime-3.5_2.12-1.9.2.jar \
+  --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
+  --conf spark.sql.catalog.local=org.apache.iceberg.spark.SparkCatalog \
+  --conf spark.sql.catalog.local.type=hadoop \
+  --conf spark.sql.catalog.local.warehouse=/opt/iceberg/warehouse/weather_analytics_project \
+  --conf spark.sql.defaultCatalog=local \
+  --conf spark.sql.session.timeZone=UTC \
+  /opt/spark-apps/{your python file}.py
+
+
+# -----------------------------------------------------------------------------
+# Open Worker Bash
+# -----------------------------------------------------------------------------
+# Open an interactive shell (-i keep stdin open, -t allocate a terminal) inside
+# the worker container. Useful for inspecting files, the warehouse directory or
+# the Spark work/log directories, and as the place to start the PySpark session
+# below.
+
+docker exec -it iceberg-spark-worker bash
+
+
+# -----------------------------------------------------------------------------
+# Open PySpark Session
+# -----------------------------------------------------------------------------
+# Run this INSIDE the worker container (after "Open Worker Bash"). It starts an
+# interactive PySpark shell connected to the same cluster and Iceberg catalog,
+# which is handy for exploring tables, e.g.:
+#   spark.table("local.weather.silver_weather").show()
+#   spark.sql("SELECT * FROM local.weather.silver_weather.snapshots").show()
+#
+# It uses the same --master, --jars and Iceberg catalog settings as the app
+# command above, but does NOT set:
+#   spark.sql.defaultCatalog  -> always use fully qualified names
+#                                (``local.weather.<table>``).
+#   spark.sql.session.timeZone -> the session uses the JVM default time zone,
+#                                so timestamps may display differently from
+#                                the UTC-based batch jobs. Add
+#                                ``--conf spark.sql.session.timeZone=UTC`` if
+#                                you need identical behaviour.
+
+/opt/spark/bin/pyspark \
+  --master spark://spark-master:7077 \
+  --jars /opt/iceberg-jars/iceberg-spark-runtime-3.5_2.12-1.9.2.jar \
+  --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
+  --conf spark.sql.catalog.local=org.apache.iceberg.spark.SparkCatalog \
+  --conf spark.sql.catalog.local.type=hadoop \
+  --conf spark.sql.catalog.local.warehouse=/opt/iceberg/warehouse/weather_analytics_project
