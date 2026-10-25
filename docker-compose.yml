@@ -1,0 +1,59 @@
+
+services:
+  spark-master:
+    image: apache/spark:3.5.1
+    # Explicit container name for easier identification in docker commands
+    container_name: iceberg-spark-master
+    # Network hostname used by Spark workers and clients to locate the master node
+    hostname: spark-master
+
+    # Start the standalone Spark master daemon in the background, 
+    # then continuously tail the log file to keep the container running in the foreground
+    command: >
+      bash -c "
+      /opt/spark/sbin/start-master.sh &&
+      tail -f /opt/spark/logs/spark--org.apache.spark.deploy.master*.out"
+
+    ports:
+      # Spark Master Web UI (view cluster state, active applications, and workers)
+      - "8080:8080"
+      # Spark Master RPC port (used by workers to register and spark-submit to dispatch jobs)
+      - "7077:7077"
+
+    volumes:
+      - ./apps:/opt/spark-apps
+      - ./data:/opt/spark-data
+      - ./iceberg-warehouse:/opt/iceberg/warehouse
+      - ./jars:/opt/iceberg-jars
+
+
+  spark-worker:
+    image: apache/spark:3.5.1
+    container_name: iceberg-spark-worker
+    hostname: spark-worker
+
+    # Start the worker daemon pointing to the master RPC endpoint with resource limits,
+    # then tail the logs to keep the container running in the foreground
+    command: >
+      bash -c "
+      /opt/spark/sbin/start-worker.sh
+      spark://spark-master:7077
+      --cores 2
+      --memory 2G &&
+      tail -f /opt/spark/logs/spark--org.apache.spark.deploy.worker*.out"
+
+    ports:
+      # Worker Web UI (monitors worker CPU/memory usage and running executors)
+      - "8081:8081"
+      # Spark Application UI (tracks jobs, stages, and execution DAG when running as driver)
+      - "4040:4040"
+
+    depends_on:
+      # Ensure master container starts before worker initialization
+      - spark-master
+
+    volumes:
+      - ./apps:/opt/spark-apps
+      - ./data:/opt/spark-data
+      - ./iceberg-warehouse:/opt/iceberg/warehouse
+      - ./jars:/opt/iceberg-jars
