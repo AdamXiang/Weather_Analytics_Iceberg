@@ -188,3 +188,7 @@ To start from an empty warehouse:
 docker compose down
 rm -rf iceberg-warehouse/weather_analytics_project data/powerbi
 ```
+## Reference
+*Jaya Chandra Kadiveti — Data with Jay* who created this amazing project for us to learn Apache Iceberg
+
+YouTube Link: [End-to-End Weather Data Pipeline | Apache Iceberg Project for Data Engineers](https://www.youtube.com/watch?v=T_6gpuG4PQY)
